@@ -42,6 +42,7 @@ var (
 	audioFormats   = []string{"best", "m4a", "mp3", "opus", "flac", "wav", "vorbis"}
 	playlistCaps   = []string{"best", "2160", "1440", "1080", "720", "480", "360"}
 	fragmentCounts = []string{"1", "2", "4", "8"}
+	boolOptions    = []string{"on", "off"}
 )
 
 func boolLabel(b bool) string {
@@ -52,6 +53,9 @@ func boolLabel(b bool) string {
 }
 
 func cycle(cur string, options []string) string {
+	if len(options) == 0 {
+		return cur
+	}
 	for i, o := range options {
 		if o == cur {
 			return options[(i+1)%len(options)]
@@ -113,18 +117,20 @@ func newSettingsState(cfg *config.Config) settingsState {
 			value:   func(m *Model) string { return m.cfg.PlaylistQuality },
 		},
 		{
-			kind:  setToggle,
-			label: "Embed thumbnail",
-			hint:  "write the cover image into the file",
-			apply: func(m *Model, val string) { m.cfg.EmbedThumbnail = val == "on" },
-			value: func(m *Model) string { return boolLabel(m.cfg.EmbedThumbnail) },
+			kind:    setToggle,
+			label:   "Embed thumbnail",
+			hint:    "write the cover image into the file",
+			options: boolOptions,
+			apply:   func(m *Model, val string) { m.cfg.EmbedThumbnail = val == "on" },
+			value:   func(m *Model) string { return boolLabel(m.cfg.EmbedThumbnail) },
 		},
 		{
-			kind:  setToggle,
-			label: "Embed metadata",
-			hint:  "write title/artist tags into the file",
-			apply: func(m *Model, val string) { m.cfg.EmbedMetadata = val == "on" },
-			value: func(m *Model) string { return boolLabel(m.cfg.EmbedMetadata) },
+			kind:    setToggle,
+			label:   "Embed metadata",
+			hint:    "write title/artist tags into the file",
+			options: boolOptions,
+			apply:   func(m *Model, val string) { m.cfg.EmbedMetadata = val == "on" },
+			value:   func(m *Model) string { return boolLabel(m.cfg.EmbedMetadata) },
 		},
 		{
 			kind:    setToggle,

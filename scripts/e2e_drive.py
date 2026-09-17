@@ -193,20 +193,29 @@ def scenario_audio():
 
 
 def scenario_settings():
-    """ctrl+s -> cycle merge container to mkv -> save -> file updated."""
+    """ctrl+s -> cycle values on every toggle kind -> save -> file updated."""
     t = TUI()
     try:
         require(t.expect(r"What should we download", 15), "URL screen", t)
         t.send(CTRL_S)
         require(t.expect(r"▍ Settings", 10), "settings screen", t)
         t.snapshot("settings-1")
-        t.send(DOWN * 2 + ENTER)  # Merge container: mp4 -> mkv
+        # fields: 0 dir, 1 template, 2 merge, 3 audio, 4 quality,
+        #         5 thumbnail, 6 metadata, 7 fragments
+        t.send(DOWN * 2 + ENTER)      # merge: mp4 -> mkv
+        t.send(DOWN * 3 + ENTER)      # thumbnail: on -> off
+        t.send(DOWN + ENTER)          # metadata: on -> off
+        t.send(DOWN + ENTER)          # fragments: 4 -> 8 (cycle 1,2,4,8)
+        t.send(UP * 2 + ENTER)        # thumbnail: off -> on  (regression: bool cycle)
         t.send("s", pause=0.5)
         require(t.expect(r"Settings saved", 10), "save toast", t)
         cfg = open(CFG).read()
         require("merge_format: mkv" in cfg, "config not updated: %r" % cfg, t)
+        require("embed_thumbnail: true" in cfg, "thumbnail should be on: %r" % cfg, t)
+        require("embed_metadata: false" in cfg, "metadata should be off: %r" % cfg, t)
+        require("concurrent_fragments: 8" in cfg, "fragments should be 8: %r" % cfg, t)
         require(t.expect(r"What should we download", 5), "did not return to URL screen", t)
-        print("PASS settings: merge_format=mkv persisted")
+        print("PASS settings: toggles + save persisted")
     finally:
         t.quit()
 
