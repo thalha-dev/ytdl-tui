@@ -24,6 +24,8 @@ type Config struct {
 	EmbedThumbnail      bool   `yaml:"embed_thumbnail"`
 	EmbedMetadata       bool   `yaml:"embed_metadata"`
 	ConcurrentFragments int    `yaml:"concurrent_fragments"` // 1..8
+	CookiesFromBrowser  string `yaml:"cookies_from_browser"` // yt-dlp value, e.g. "firefox" or "firefox:/path"
+	CookiesFile         string `yaml:"cookies_file"`         // exported cookies.txt (fallback)
 }
 
 // Default returns the built-in configuration used on first run.
@@ -114,6 +116,11 @@ func (c *Config) Normalize() {
 	if c.ConcurrentFragments < 1 || c.ConcurrentFragments > 8 {
 		c.ConcurrentFragments = def.ConcurrentFragments
 	}
+
+	// Values are passed straight to yt-dlp: trim, never lowercase (the
+	// browser form may embed a filesystem path). ~ is expanded for files.
+	c.CookiesFromBrowser = strings.TrimSpace(c.CookiesFromBrowser)
+	c.CookiesFile = expandPath(strings.TrimSpace(c.CookiesFile))
 }
 
 // Save writes the config as YAML, creating parent directories as needed.

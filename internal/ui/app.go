@@ -216,7 +216,7 @@ func (m *Model) startProbe(url string) tea.Cmd {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	m.probeCancel = cancel
 	return tea.Batch(m.spinner.Tick, func() tea.Msg {
-		info, err := ytdlp.Probe(ctx, url)
+		info, err := ytdlp.Probe(ctx, url, ytdlp.CookieArgs(m.cfg.CookiesFromBrowser, m.cfg.CookiesFile)...)
 		return probeDoneMsg{info: info, err: err, seq: seq}
 	})
 }
@@ -272,6 +272,7 @@ func (m *Model) baseRequest(urls []string) ytdlp.Request {
 		EmbedThumbnail: m.cfg.EmbedThumbnail,
 		EmbedMetadata:  m.cfg.EmbedMetadata,
 		Concurrency:    m.cfg.ConcurrentFragments,
+		CookieArgs:     ytdlp.CookieArgs(m.cfg.CookiesFromBrowser, m.cfg.CookiesFile),
 	}
 }
 

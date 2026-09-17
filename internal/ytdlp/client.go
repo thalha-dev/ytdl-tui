@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os/exec"
@@ -14,15 +15,22 @@ import (
 )
 
 // Probe runs `yt-dlp -J` on the URL. Playlists are flattened (fast; entries
-// carry id/title/duration but not per-entry formats).
-func Probe(ctx context.Context, url string) (*Info, error) {
-	cmd := exec.CommandContext(ctx, "yt-dlp", "-J", "--no-warnings", "--flat-playlist", url)
+// carry id/title/duration but not per-entry formats). extraArgs (e.g. cookie
+// flags) are passed through to yt-dlp.
+func Probe(ctx context.Context, url string, extraArgs ...string) (*Info, error) {
+	args := []string{"-J", "--no-warnings", "--flat-playlist"}
+	args = append(args, extraArgs...)
+	args = append(args, url)
+	cmd := exec.CommandContext(ctx, "yt-dlp", args...)
 
 	var out, errb bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &errb
 
 	if err := cmd.Run(); err != nil {
+		if hint, ok := BotCheckHint(errb.String()); ok {
+			return nil, errors.New(hint)
+		}
 		return nil, fmt.Errorf("yt-dlp: %s", lastLines(errb.String(), 5))
 	}
 
@@ -53,7 +61,8 @@ type Request struct {
 	MergeFormat    string // container when merging: mp4|mkv|webm
 	EmbedThumbnail bool
 	EmbedMetadata  bool
-	Concurrency    int // --concurrent-fragments
+	Concurrency    int      // --concurrent-fragments
+	CookieArgs     []string // e.g. --cookies-from-browser firefox:…
 }
 
 // EventKind classifies one parsed yt-dlp output line.
@@ -112,6 +121,8 @@ func Download(ctx context.Context, req Request, onEvent func(Event)) error {
 	}
 	args = append(args, req.URLs...)
 
+	args = append(args, req.CookieArgs...)
+
 	cmd := exec.CommandContext(ctx, "yt-dlp", args...)
 
 	stdout, err := cmd.StdoutPipe()
@@ -154,6 +165,9 @@ func Download(ctx context.Context, req Request, onEvent func(Event)) error {
 		return ctx.Err() // canceled by the user
 	}
 	if waitErr != nil {
+		if hint, ok := BotCheckHint(errTail.String()); ok {
+			return errors.New(hint)
+		}
 		if msg := strings.TrimSpace(errTail.String()); msg != "" {
 			return fmt.Errorf("yt-dlp: %s", lastLines(msg, 5))
 		}

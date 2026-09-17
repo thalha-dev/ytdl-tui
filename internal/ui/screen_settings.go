@@ -11,6 +11,7 @@ import (
 
 	"github.com/thalha-dev/ytdl-tui/internal/config"
 	"github.com/thalha-dev/ytdl-tui/internal/ui/styles"
+	"github.com/thalha-dev/ytdl-tui/internal/ytdlp"
 )
 
 type settingKind int
@@ -28,6 +29,7 @@ type settingField struct {
 	options []string // for toggles: cycle order
 	apply   func(m *Model, val string)
 	value   func(m *Model) string
+	display func(m *Model) string // optional pretty label; cycling uses value
 }
 
 // settingsState is the settings screen's state.
@@ -50,6 +52,45 @@ func boolLabel(b bool) string {
 		return "on"
 	}
 	return "off"
+}
+
+// cookieBrowserOptions is the cycle for the cookies row: none → detected
+// browsers → the common names yt-dlp supports, deduped.
+func cookieBrowserOptions() []string {
+	out := []string{""}
+	seen := map[string]bool{"": true}
+	for _, v := range ytdlp.DetectBrowsers() {
+		if !seen[v] {
+			seen[v] = true
+			out = append(out, v)
+		}
+	}
+	for _, name := range []string{"firefox", "chrome", "brave", "edge", "chromium", "vivaldi", "opera", "safari"} {
+		if !seen[name] {
+			seen[name] = true
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
+func cookieValueLabel(v string) string {
+	if v == "" {
+		return "none"
+	}
+	return v
+}
+
+func cookieBrowserHint() string {
+	detected := ytdlp.DetectBrowsers()
+	if len(detected) == 0 {
+		return "no browser cookie stores found — export a cookies.txt and use Cookies file"
+	}
+	short := detected[0]
+	if i := strings.Index(short, ":"); i >= 0 {
+		short = short[:i] + ":<profile>"
+	}
+	return "detected: " + short + " · safari needs Full Disk Access"
 }
 
 func cycle(cur string, options []string) string {
@@ -143,6 +184,22 @@ func newSettingsState(cfg *config.Config) settingsState {
 				}
 			},
 			value: func(m *Model) string { return strconv.Itoa(m.cfg.ConcurrentFragments) },
+		},
+		{
+			kind:    setToggle,
+			label:   "Cookies (browser)",
+			hint:    cookieBrowserHint(),
+			options: cookieBrowserOptions(),
+			apply:   func(m *Model, val string) { m.cfg.CookiesFromBrowser = val },
+			value:   func(m *Model) string { return m.cfg.CookiesFromBrowser },
+			display: func(m *Model) string { return cookieValueLabel(m.cfg.CookiesFromBrowser) },
+		},
+		{
+			kind:  setInput,
+			label: "Cookies file",
+			hint:  "exported cookies.txt — used only when no browser is set",
+			apply: func(m *Model, val string) { m.cfg.CookiesFile = val },
+			value: func(m *Model) string { return m.cfg.CookiesFile },
 		},
 	}
 	for i := range s.fields {
@@ -261,11 +318,14 @@ func (m *Model) viewSettings() string {
 			}
 		case setToggle:
 			v := f.value(m)
+			if f.display != nil {
+				v = f.display(m)
+			}
 			st := styles.RowDesc
-			if v == "on" || (v != "off" && v != "best") {
+			if v != "off" && v != "best" && v != "none" {
 				st = styles.Checkmark
 			}
-			value = st.Render(v)
+			value = st.Render(truncate(v, maxInt(m.width-42, 12)))
 		}
 
 		line := cursor + styles.InfoLabel.Render(f.label) + "  " + value

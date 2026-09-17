@@ -76,7 +76,26 @@ playlist_quality: "1080"   # best | 2160 | 1440 | 1080 | 720 | 480 | 360
 embed_thumbnail: true
 embed_metadata: true
 concurrent_fragments: 4    # 1..8
+cookies_from_browser: ""   # e.g. firefox, chrome, or firefox:/path/to/profile
+cookies_file: ""           # exported cookies.txt — used when no browser is set
 ```
+
+## YouTube bot-check ("Sign in to confirm you're not a bot")
+
+YouTube occasionally blocks unauthenticated yt-dlp requests based on IP
+reputation — bursts of downloads make it more likely, and it usually
+clears on its own. Permanent fix: authenticate yt-dlp with your browser's
+cookies.
+
+- In the TUI: `ctrl+s` → **Cookies (browser)** → cycle to your browser
+  (`enter`) → `s` to save. Installed browsers are auto-detected, including
+  Firefox forks like Zen (passed as `firefox:<profile path>`).
+- Cookies help most when that browser is **signed in to YouTube**.
+- Or export a `cookies.txt` and set **Cookies file**.
+- When the bot-check hits, the error message points you at these settings.
+- The check is IP-reputation based: it flaps, and retrying a few minutes
+  later often just works.
+- Safari requires Full Disk Access for your terminal to read cookies.
 
 ## Project layout
 

@@ -207,6 +207,7 @@ def scenario_settings():
         t.send(DOWN + ENTER)          # metadata: on -> off
         t.send(DOWN + ENTER)          # fragments: 4 -> 8 (cycle 1,2,4,8)
         t.send(UP * 2 + ENTER)        # thumbnail: off -> on  (regression: bool cycle)
+        t.send(DOWN * 3 + ENTER)      # cookies browser (row 8): none -> detected (zen)
         t.send("s", pause=0.5)
         require(t.expect(r"Settings saved", 10), "save toast", t)
         cfg = open(CFG).read()
@@ -214,6 +215,8 @@ def scenario_settings():
         require("embed_thumbnail: true" in cfg, "thumbnail should be on: %r" % cfg, t)
         require("embed_metadata: false" in cfg, "metadata should be off: %r" % cfg, t)
         require("concurrent_fragments: 8" in cfg, "fragments should be 8: %r" % cfg, t)
+        require("cookies_from_browser: firefox:" in cfg,
+                "cookies browser should be the detected zen profile: %r" % cfg, t)
         require(t.expect(r"What should we download", 5), "did not return to URL screen", t)
         print("PASS settings: toggles + save persisted")
     finally:
