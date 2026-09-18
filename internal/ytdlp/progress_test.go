@@ -1,6 +1,7 @@
 package ytdlp
 
 import (
+	"runtime"
 	"testing"
 )
 
@@ -58,8 +59,14 @@ func TestParsePhaseLines(t *testing.T) {
 }
 
 func TestParseFinalPath(t *testing.T) {
-	ev, ok := ParseLine("/Users/me/Downloads/YouTube/Title [id].mp4")
-	if !ok || ev.Kind != EventFinalPath || ev.Text != "/Users/me/Downloads/YouTube/Title [id].mp4" {
+	// yt-dlp prints the native path of the current platform; IsAbs is
+	// platform-dependent, so build the fixture accordingly.
+	p := "/Users/me/Downloads/YouTube/Title [id].mp4"
+	if runtime.GOOS == "windows" {
+		p = `C:\Users\me\Downloads\YouTube\Title [id].mp4`
+	}
+	ev, ok := ParseLine(p)
+	if !ok || ev.Kind != EventFinalPath || ev.Text != p {
 		t.Fatalf("got %+v ok=%v", ev, ok)
 	}
 }
