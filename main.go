@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"runtime/debug"
 
 	"github.com/charmbracelet/bubbletea"
 
@@ -13,8 +14,19 @@ import (
 	"github.com/thalha-dev/ytdl-tui/internal/ui"
 )
 
-// version is set via -ldflags at build time.
+// version is set via -ldflags at build time; `go install` builds fall back
+// to the module version embedded in the binary's build info.
 var version = "dev"
+
+func resolvedVersion() string {
+	if version != "dev" {
+		return version
+	}
+	if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" && info.Main.Version != "(devel)" {
+		return info.Main.Version
+	}
+	return "dev"
+}
 
 func main() {
 	cfgPath := flag.String("config", "", "path to config file (default: "+config.DefaultPath()+")")
@@ -22,7 +34,7 @@ func main() {
 	flag.Parse()
 
 	if *showVersion {
-		fmt.Println("ytdl-tui", version)
+		fmt.Println("ytdl-tui", resolvedVersion())
 		return
 	}
 
