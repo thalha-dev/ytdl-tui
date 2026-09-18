@@ -1,0 +1,29 @@
+#!/bin/bash
+# Fake yt-dlp used ONLY to generate deterministic README screenshots.
+# Serves canned metadata and simulates a download so the tape runs fast
+# and identically every time. Not part of the app.
+DIR="$(cd "$(dirname "$0")" && pwd)"
+
+for a in "$@"; do
+  case "$a" in
+    -J) MODE=meta ;;
+  esac
+done
+
+if [ "$MODE" = "meta" ]; then
+  cat "$DIR/probe.json"
+  exit 0
+fi
+
+DEST="/Users/apple/Movies/YouTube/Skyline FPV — Cinematic Drone Shots"
+echo "[download] Destination: ${DEST}.f137.mp4"
+sleep 0.6
+for pct in 9 22 36 49 61 74 88 97; do
+  echo "PROGRESS| ${pct}.5%| 4.81MiB/s|00:12| 12.25MiB"
+  sleep 0.6
+done
+echo "PROGRESS| 100.0%| 4.81MiB/s|00:00| 12.25MiB"
+sleep 0.8
+echo "[Merger] Merging formats into \"${DEST} [278IRQ6HSi4].mp4\""
+sleep 1.2
+echo "${DEST} [278IRQ6HSi4].mp4"

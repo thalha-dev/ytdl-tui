@@ -22,6 +22,8 @@ BASE = "/tmp/ytdl-tui-e2e"
 BIN = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "bin", "ytdl-tui")
 CFG = os.path.join(BASE, "config.yaml")
 DL = os.path.join(BASE, "downloads")
+DL2 = os.path.join(BASE, "downloads2")
+DL3 = os.path.join(BASE, "downloads3")
 VIDEO_URL = "https://www.youtube.com/watch?v=278IRQ6HSi4"
 PLAYLIST_URL = "https://www.youtube.com/playlist?list=PLbpi6ZahtOH6Blw3RGYpWkSByi_T7Rygb"
 
@@ -30,7 +32,9 @@ ANSI = re.compile(r"\x1b\[[0-9;?]*[a-zA-Z]|\x1b\][^\x07]*\x07|\x1b[()][0-9A-B]|\
 UP, DOWN, ENTER, ESC, TAB, CTRL_S, CTRL_C = "\x1b[A", "\x1b[B", "\r", "\x1b", "\t", "\x13", "\x03"
 BS = "\x7f"
 
-DEFAULT_CONFIG = """download_dir: {dl}
+DEFAULT_CONFIG = """download_dirs:
+    - {dl}
+    - {dl2}
 filename_template: '%(title)s [%(id)s].%(ext)s'
 merge_format: mp4
 audio_format: m4a
@@ -38,7 +42,7 @@ playlist_quality: "1080"
 embed_thumbnail: true
 embed_metadata: true
 concurrent_fragments: 4
-""".format(dl=DL)
+""".format(dl=DL, dl2=DL2)
 
 
 class TUI:
@@ -159,6 +163,8 @@ def scenario_single():
 
         # rows: Best-of, 1080p, 720p, 480p, 360p, ...
         t.send(DOWN * 4 + ENTER)  # 360p
+        require(t.expect(r"Save to", 10), "save-to picker never appeared", t)
+        t.send(ENTER)             # first folder (default)
         require(t.expect(r"▍ Download", 10), "download screen never appeared", t)
         require(t.expect(r"✓ saved to", 240), "download never finished", t)
         fr = t.frame()
@@ -182,26 +188,40 @@ def scenario_audio():
         t.send(DOWN + ENTER)  # Audio only
         require(t.expect(r"Pick an audio format", 10), "audio screen", t)
         t.snapshot("audio-1-formats")
+        before = set(os.listdir(DL2))
         t.send(ENTER)  # Best available
+        require(t.expect(r"Save to", 10), "save-to picker never appeared", t)
+        t.send(DOWN + ENTER)  # pick the SECOND folder
         require(t.expect(r"✓ saved to", 240), "audio download never finished", t)
         t.snapshot("audio-2-done")
-        files = os.listdir(DL)
-        require(any(f.endswith(".m4a") for f in files), "no .m4a produced: %r" % files, t)
-        print("PASS audio: downloaded", [f for f in files if f.endswith(".m4a")][0])
+        new = set(os.listdir(DL2)) - before
+        require(len(new) == 1 and new.pop().endswith(".m4a"),
+                "no new .m4a in second folder: %r" % os.listdir(DL2), t)
+        print("PASS audio: downloaded to second folder")
     finally:
         t.quit()
 
 
 def scenario_settings():
-    """ctrl+s -> cycle values on every toggle kind -> save -> file updated."""
+    """ctrl+s -> manage folders -> cycle every toggle kind -> save."""
     t = TUI()
     try:
         require(t.expect(r"What should we download", 15), "URL screen", t)
         t.send(CTRL_S)
         require(t.expect(r"▍ Settings", 10), "settings screen", t)
         t.snapshot("settings-1")
-        # fields: 0 dir, 1 template, 2 merge, 3 audio, 4 quality,
-        #         5 thumbnail, 6 metadata, 7 fragments
+        # fields: 0 folders, 1 template, 2 merge, 3 audio, 4 quality,
+        #         5 thumbnail, 6 metadata, 7 fragments, 8 cookies, 9 cookies-file
+        t.send(ENTER)                 # open the folder manager
+        require(t.expect(r"▍ Download folders", 10), "folders screen", t)
+        t.send("a", pause=0.3)        # add a third folder
+        t.send(DL3, pause=0.2)
+        t.send(ENTER, pause=0.3)
+        require(t.expect(r"downloads3", 5), "added folder not listed", t)
+        t.send("d", pause=0.3)        # delete it again (cursor is on it)
+        t.send(ESC, pause=0.3)
+        require(t.expect(r"▍ Settings", 5), "back to settings", t)
+
         t.send(DOWN * 2 + ENTER)      # merge: mp4 -> mkv
         t.send(DOWN * 3 + ENTER)      # thumbnail: on -> off
         t.send(DOWN + ENTER)          # metadata: on -> off
@@ -217,8 +237,10 @@ def scenario_settings():
         require("concurrent_fragments: 8" in cfg, "fragments should be 8: %r" % cfg, t)
         require("cookies_from_browser: firefox:" in cfg,
                 "cookies browser should be the detected zen profile: %r" % cfg, t)
+        require("downloads2" in cfg and "downloads3" not in cfg,
+                "folder list should keep exactly the two configured dirs: %r" % cfg, t)
         require(t.expect(r"What should we download", 5), "did not return to URL screen", t)
-        print("PASS settings: toggles + save persisted")
+        print("PASS settings: folders + toggles + save persisted")
     finally:
         t.quit()
 
@@ -239,6 +261,8 @@ def scenario_playlist():
         t.send(DOWN * 2 + ENTER)  # Select videos
         require(t.expect(r"mark the ones to download", 30), "playlist picker", t)
         t.send(TAB + ENTER)  # select first entry, confirm
+        require(t.expect(r"Save to", 10), "save-to picker never appeared", t)
+        t.send(ENTER)        # first folder
         require(t.expect(r"✓ (saved to|\d+ files saved to)", 300), "playlist download never finished", t)
         t.snapshot("playlist-2-done")
         new = set(os.listdir(DL)) - before
@@ -263,6 +287,7 @@ def main():
     if os.path.exists(BASE):
         shutil.rmtree(BASE)
     os.makedirs(DL)
+    os.makedirs(DL2)
     with open(CFG, "w") as f:
         f.write(DEFAULT_CONFIG)
 

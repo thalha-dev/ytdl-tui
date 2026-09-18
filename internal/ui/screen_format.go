@@ -227,7 +227,7 @@ func (m *Model) startVideoDownload(selector, qualityCap string) tea.Cmd {
 	req.QualityCap = qualityCap
 
 	subtitle := describeFormat(m, selector)
-	return m.launch(req, m.info.Title, subtitle)
+	return m.offerSaveTo(req, m.info.Title, subtitle)
 }
 
 func (m *Model) startAudioDownload(selector string) tea.Cmd {
@@ -239,7 +239,7 @@ func (m *Model) startAudioDownload(selector string) tea.Cmd {
 	if m.cfg.AudioFormat != "best" {
 		sub += " · → " + m.cfg.AudioFormat
 	}
-	return m.launch(req, m.info.Title, sub)
+	return m.offerSaveTo(req, m.info.Title, sub)
 }
 
 // startPlaylistDownload launches a playlist download; when entries is nil
@@ -275,7 +275,7 @@ func (m *Model) startPlaylistDownload(audioOnly bool, entries []*ytdlp.Info) tea
 		}
 		sub = fmt.Sprintf("%d videos · %s · %s", n, capQ, m.cfg.MergeFormat)
 	}
-	return m.launch(req, title, sub)
+	return m.offerSaveTo(req, title, sub)
 }
 
 // describeFormat renders the chosen format for the download header.

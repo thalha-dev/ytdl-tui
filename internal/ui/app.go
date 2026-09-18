@@ -5,6 +5,7 @@ package ui
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -30,8 +31,10 @@ const (
 	screenAudio             // audio format picker
 	screenExpert            // raw yt-dlp format picker
 	screenPlaylist          // multi-select playlist entries
+	screenSaveTo            // choose one of the configured folders
 	screenDownload
 	screenSettings
+	screenFolders // manage the download folder list
 )
 
 // Model is the root Bubble Tea model.
@@ -60,6 +63,15 @@ type Model struct {
 	audioPicker    components.Picker
 	expertPicker   components.Picker
 	playlistPicker components.Picker
+	saveToPicker   components.Picker
+	saveToBack     screen // where esc returns to
+
+	// pending download waiting for a folder choice on the save-to screen
+	pendingReq   *ytdlp.Request
+	pendingTitle string
+	pendingSub   string
+
+	folders foldersState
 
 	dl       dlState
 	settings settingsState
@@ -198,10 +210,14 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.updateMenu(msg)
 	case screenFamily, screenResolution, screenAudio, screenExpert, screenPlaylist:
 		return m.updatePickers(msg)
+	case screenSaveTo:
+		return m.updateSaveTo(msg)
 	case screenDownload:
 		return m.updateDownload(key)
 	case screenSettings:
 		return m.updateSettings(key, msg)
+	case screenFolders:
+		return m.updateFolders(key, msg)
 	}
 	return m, nil
 }
@@ -246,11 +262,54 @@ func (m *Model) onProbed(info *ytdlp.Info) {
 
 // --- downloads ---
 
-func (m *Model) launch(req ytdlp.Request, title, subtitle string) tea.Cmd {
+// offerSaveTo routes a download through the folder picker when several are
+// configured, otherwise launches straight into the only folder.
+func (m *Model) offerSaveTo(req ytdlp.Request, title, sub string) tea.Cmd {
+	dir := m.cfg.DownloadDirs[0]
+	if len(m.cfg.DownloadDirs) > 1 {
+		m.pendingReq = &req
+		m.pendingTitle = title
+		m.pendingSub = sub
+		m.saveToBack = m.screen
+
+		items := make([]components.Item, 0, len(m.cfg.DownloadDirs))
+		for i, d := range m.cfg.DownloadDirs {
+			desc := "configured save location"
+			if i == 0 {
+				desc = "default save location"
+			}
+			items = append(items, components.Item{Title: d, Desc: desc, Data: d})
+		}
+		m.saveToPicker = components.NewPicker("Save to", items, false)
+		m.screen = screenSaveTo
+		return nil
+	}
+	req.OutputTemplate = m.cfg.ResolveOutput(dir)
+	return m.launch(req, title, sub, dir)
+}
+
+func (m *Model) updateSaveTo(msg tea.Msg) (tea.Model, tea.Cmd) {
+	m.saveToPicker.Update(msg)
+	if items, ok := m.saveToPicker.ConsumeSelected(); ok {
+		dir, _ := items[0].Data.(string)
+		req := *m.pendingReq
+		req.OutputTemplate = m.cfg.ResolveOutput(dir)
+		cmd := m.launch(req, m.pendingTitle, m.pendingSub, dir)
+		m.pendingReq = nil
+		return m, cmd
+	}
+	if m.saveToPicker.ConsumeCancel() {
+		m.screen = m.saveToBack
+	}
+	return m, nil
+}
+
+func (m *Model) launch(req ytdlp.Request, title, sub, dir string) tea.Cmd {
 	ctx, cancel := context.WithCancel(context.Background())
 	m.dl = newDLState(cancel, m.dl.bar.Width)
 	m.dl.title = title
-	m.dl.subtitle = subtitle
+	m.dl.subtitle = sub
+	m.dl.dir = dir
 	m.screen = screenDownload
 
 	return tea.Batch(m.spinner.Tick, func() tea.Msg {
@@ -266,7 +325,6 @@ func (m *Model) launch(req ytdlp.Request, title, subtitle string) tea.Cmd {
 func (m *Model) baseRequest(urls []string) ytdlp.Request {
 	return ytdlp.Request{
 		URLs:           urls,
-		OutputTemplate: m.cfg.ResolveOutput(),
 		MergeFormat:    m.cfg.MergeFormat,
 		AudioFormat:    m.cfg.AudioFormat,
 		EmbedThumbnail: m.cfg.EmbedThumbnail,
@@ -333,6 +391,13 @@ func (m *Model) footer() string {
 			[2]string{"enter", "select"},
 			[2]string{"esc", "back"},
 		)
+	case screenSaveTo:
+		return styles.HelpLine(
+			[2]string{"type", "filter"},
+			[2]string{"↑↓", "move"},
+			[2]string{"enter", "save here"},
+			[2]string{"esc", "back"},
+		)
 	case screenDownload:
 		if m.dl.running {
 			return styles.HelpLine([2]string{"c", "cancel"}, [2]string{"ctrl+c", "quit"})
@@ -347,9 +412,16 @@ func (m *Model) footer() string {
 		return styles.HelpLine([2]string{"enter", "back"}, [2]string{"ctrl+c", "quit"})
 	case screenSettings:
 		return styles.HelpLine(
-			[2]string{"↑↓", "navigate"},
+			[2]string{"↑↓ / ctrl+jk", "navigate"},
 			[2]string{"enter", "edit / toggle"},
 			[2]string{"s", "save"},
+			[2]string{"esc", "back"},
+		)
+	case screenFolders:
+		return styles.HelpLine(
+			[2]string{"a", "add"},
+			[2]string{"e", "edit"},
+			[2]string{"d", "delete"},
 			[2]string{"esc", "back"},
 		)
 	}
@@ -380,10 +452,14 @@ func (m *Model) View() string {
 			content = m.viewPicker(&m.expertPicker)
 		case screenPlaylist:
 			content = m.viewPicker(&m.playlistPicker)
+		case screenSaveTo:
+			content = m.viewSaveTo()
 		case screenDownload:
 			content = m.viewDownload()
 		case screenSettings:
 			content = m.viewSettings()
+		case screenFolders:
+			content = m.viewFolders()
 		}
 	}
 
@@ -421,6 +497,19 @@ func (m *Model) viewPicker(p *components.Picker) string {
 	return b.String()
 }
 
+func (m *Model) viewSaveTo() string {
+	var b strings.Builder
+	if m.pendingTitle != "" {
+		b.WriteString(styles.CardTitle.Render("▍ "+truncate(m.pendingTitle, m.width-8)) + "\n")
+		if m.pendingSub != "" {
+			b.WriteString("  " + styles.RowDesc.Render(m.pendingSub) + "\n")
+		}
+		b.WriteString("\n")
+	}
+	b.WriteString(m.saveToPicker.View(m.width - 6))
+	return b.String()
+}
+
 // contextSubtitle describes what is being picked.
 func (m *Model) contextSubtitle() string {
 	if m.info == nil {
@@ -449,6 +538,11 @@ func maxInt(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// createDir makes sure a download folder exists.
+func createDir(dir string) error {
+	return os.MkdirAll(dir, 0o755)
 }
 
 // truncate cuts a plain string to w cells, appending an ellipsis.

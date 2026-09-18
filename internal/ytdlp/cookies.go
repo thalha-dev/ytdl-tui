@@ -96,6 +96,14 @@ func firefoxBaseDirs(home string) []string {
 			filepath.Join(appSupport, "zen"),     // Zen Browser
 			filepath.Join(appSupport, "Firefox"), // plain Firefox
 		}
+	case "windows":
+		if cfg, err := os.UserConfigDir(); err == nil { // %AppData%
+			return []string{
+				filepath.Join(cfg, "zen"), // Zen Browser
+				filepath.Join(cfg, "Mozilla", "Firefox"),
+			}
+		}
+		return nil
 	default: // linux and friends
 		return []string{
 			filepath.Join(home, ".zen"),
@@ -113,23 +121,33 @@ func chromiumCandidates(home string) []struct {
 
 	var dirs []struct{ name, path string }
 	for _, d := range []struct {
-		name              string
-		darwin, linuxPath string
+		name                           string
+		darwin, linuxPath, windowsPath string
 	}{
-		{"chrome", filepath.Join(appSupport, "Google", "Chrome"), filepath.Join(xdg, "google-chrome")},
-		{"brave", filepath.Join(appSupport, "BraveSoftware", "Brave-Browser"), filepath.Join(xdg, "BraveSoftware", "Brave-Browser")},
-		{"edge", filepath.Join(appSupport, "Microsoft Edge"), filepath.Join(xdg, "microsoft-edge")},
-		{"vivaldi", filepath.Join(appSupport, "Vivaldi"), filepath.Join(xdg, "vivaldi")},
-		{"chromium", filepath.Join(appSupport, "Chromium"), filepath.Join(xdg, "chromium")},
-		{"opera", filepath.Join(appSupport, "com.operasoftware.Opera"), filepath.Join(xdg, "opera")},
+		{"chrome", filepath.Join(appSupport, "Google", "Chrome"), filepath.Join(xdg, "google-chrome"), filepath.Join(localAppData(), "Google", "Chrome", "User Data")},
+		{"brave", filepath.Join(appSupport, "BraveSoftware", "Brave-Browser"), filepath.Join(xdg, "BraveSoftware", "Brave-Browser"), filepath.Join(localAppData(), "BraveSoftware", "Brave-Browser", "User Data")},
+		{"edge", filepath.Join(appSupport, "Microsoft Edge"), filepath.Join(xdg, "microsoft-edge"), filepath.Join(localAppData(), "Microsoft", "Edge", "User Data")},
+		{"vivaldi", filepath.Join(appSupport, "Vivaldi"), filepath.Join(xdg, "vivaldi"), filepath.Join(localAppData(), "Vivaldi", "User Data")},
+		{"chromium", filepath.Join(appSupport, "Chromium"), filepath.Join(xdg, "chromium"), filepath.Join(localAppData(), "Chromium", "User Data")},
+		{"opera", filepath.Join(appSupport, "com.operasoftware.Opera"), filepath.Join(xdg, "opera"), filepath.Join(localAppData(), "Opera Software", "Opera Stable")},
 	} {
-		if runtime.GOOS == "darwin" {
-			dirs = append(dirs, struct{ name, path string }{d.name, d.darwin})
-		} else {
-			dirs = append(dirs, struct{ name, path string }{d.name, d.linuxPath})
+		p := d.linuxPath
+		switch runtime.GOOS {
+		case "darwin":
+			p = d.darwin
+		case "windows":
+			p = d.windowsPath
+		}
+		if p != "" {
+			dirs = append(dirs, struct{ name, path string }{d.name, p})
 		}
 	}
 	return dirs
+}
+
+// localAppData returns %LOCALAPPDATA% (Windows only; empty elsewhere).
+func localAppData() string {
+	return os.Getenv("LOCALAPPDATA")
 }
 
 // defaultFirefoxProfile resolves the profile a Firefox fork actually uses:

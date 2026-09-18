@@ -1,0 +1,10 @@
+download_dirs:
+    - ~/Movies/YouTube
+    - ~/Downloads/YouTube
+filename_template: '%(title)s [%(id)s].%(ext)s'
+merge_format: mp4
+audio_format: m4a
+playlist_quality: "1080"
+embed_thumbnail: true
+embed_metadata: true
+concurrent_fragments: 4

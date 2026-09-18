@@ -39,6 +39,7 @@ type dlState struct {
 
 	phase    string
 	dest     string
+	dir      string
 	log      []string
 	files    int
 	fullPath string
@@ -126,7 +127,10 @@ func (m *Model) updateDownload(key string) (tea.Model, tea.Cmd) {
 
 	case "o":
 		if d.done && d.err == "" {
-			dir := m.cfg.DownloadDir
+			dir := d.dir
+			if dir == "" {
+				dir = m.cfg.DownloadDirs[0]
+			}
 			if d.files == 1 && d.fullPath != "" {
 				dir = filepath.Dir(d.fullPath)
 			}
@@ -173,11 +177,11 @@ func (m *Model) viewDownload() string {
 		default:
 			if d.files > 1 {
 				b.WriteString("  " + styles.SuccessText.Render(fmt.Sprintf("✓ %d files saved to ", d.files)) +
-					styles.InfoValue.Render(m.cfg.DownloadDir) + "\n")
+					styles.InfoValue.Render(d.dir) + "\n")
 			} else if d.fullPath != "" {
 				b.WriteString("  " + styles.SuccessText.Render("✓ saved to ") + styles.InfoValue.Render(d.fullPath) + "\n")
 			} else {
-				b.WriteString("  " + styles.SuccessText.Render("✓ saved to ") + styles.InfoValue.Render(m.cfg.DownloadDir) + "\n")
+				b.WriteString("  " + styles.SuccessText.Render("✓ saved to ") + styles.InfoValue.Render(d.dir) + "\n")
 			}
 		}
 		if len(d.log) > 0 {

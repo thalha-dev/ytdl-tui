@@ -1,7 +1,7 @@
 package ui
 
 import (
-	"os"
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -19,6 +19,7 @@ type settingKind int
 const (
 	setInput settingKind = iota
 	setToggle
+	setAction // enter opens a sub-screen (e.g. folder list)
 )
 
 type settingField struct {
@@ -120,11 +121,16 @@ func newSettingsState(cfg *config.Config) settingsState {
 	s := settingsState{}
 	s.fields = []settingField{
 		{
-			kind:  setInput,
-			label: "Download folder",
-			hint:  "where files are saved (~ is expanded)",
-			apply: func(m *Model, val string) { m.cfg.DownloadDir = val },
-			value: func(m *Model) string { return m.cfg.DownloadDir },
+			kind:  setAction,
+			label: "Download folders",
+			hint:  "enter to manage · first is the default · up to 5",
+			value: func(m *Model) string {
+				n := len(m.cfg.DownloadDirs)
+				if n == 1 {
+					return m.cfg.DownloadDirs[0]
+				}
+				return fmt.Sprintf("%d folders · default %s", n, m.cfg.DownloadDirs[0])
+			},
 		},
 		{
 			kind:  setInput,
@@ -250,11 +256,11 @@ func (m *Model) updateSettings(key string, msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	switch key {
-	case "up", "ctrl+p":
+	case "up", "ctrl+k", "ctrl+p":
 		if s.cursor > 0 {
 			s.cursor--
 		}
-	case "down", "ctrl+n":
+	case "down", "ctrl+j", "ctrl+n":
 		if s.cursor < len(s.fields)-1 {
 			s.cursor++
 		}
@@ -264,6 +270,9 @@ func (m *Model) updateSettings(key string, msg tea.Msg) (tea.Model, tea.Cmd) {
 		case setInput:
 			s.editing = true
 			return m, f.input.Focus()
+		case setAction:
+			m.enterFolders()
+			return m, nil
 		case setToggle:
 			f.apply(m, cycle(f.value(m), f.options))
 		}
@@ -287,8 +296,10 @@ func (m *Model) saveSettings() tea.Cmd {
 	if err := m.cfg.Save(m.cfgPath); err != nil {
 		return m.setStatus("failed to save: "+err.Error(), true)
 	}
-	if err := os.MkdirAll(m.cfg.DownloadDir, 0o755); err != nil {
-		return m.setStatus("cannot create download folder: "+err.Error(), true)
+	for _, dir := range m.cfg.DownloadDirs {
+		if err := createDir(dir); err != nil {
+			return m.setStatus("cannot create download folder: "+err.Error(), true)
+		}
 	}
 	m.screen = screenURL
 	cmd := m.setStatus("Settings saved → "+m.cfgPath, false)
@@ -326,12 +337,14 @@ func (m *Model) viewSettings() string {
 				st = styles.Checkmark
 			}
 			value = st.Render(truncate(v, maxInt(m.width-42, 12)))
+		case setAction:
+			value = styles.Checkmark.Render(truncate(f.value(m), maxInt(m.width-42, 12)))
 		}
 
 		line := cursor + styles.InfoLabel.Render(f.label) + "  " + value
 		if i == s.cursor {
 			pad := m.width - 6 - lipgloss.Width(cursor+styles.InfoLabel.Render(f.label)) - lipgloss.Width(f.input.Value())
-			if f.kind == setToggle {
+			if f.kind != setInput {
 				pad = 0
 			}
 			if pad > 0 {

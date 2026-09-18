@@ -37,10 +37,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Make sure the download folder exists before the first download.
-	if err := os.MkdirAll(cfg.DownloadDir, 0o755); err != nil {
-		fmt.Fprintf(os.Stderr, "ytdl-tui: cannot create download folder: %v\n", err)
-		os.Exit(1)
+	// Make sure every configured download folder exists before the first run.
+	for _, dir := range cfg.DownloadDirs {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			fmt.Fprintf(os.Stderr, "ytdl-tui: cannot create download folder %s: %v\n", dir, err)
+			os.Exit(1)
+		}
 	}
 
 	// Optional debug logging: YTDL_TUI_DEBUG=path/to/log
